@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-}
 
 module Main (main) where
 
@@ -33,6 +35,7 @@ import qualified XMonad.Layout.NoBorders             as Borders
 import qualified XMonad.Layout.PerWorkspace          as PerWorkspace
 import qualified XMonad.Layout.Renamed               as Renamed
 import qualified XMonad.Layout.Spacing               as Spacing
+import qualified XMonad.Layout.TabBarDecoration      as TabDeco
 import qualified XMonad.Layout.Tabbed                as Tabbed
 import           XMonad.Layout.TwoPane               (TwoPane (..))
 import qualified XMonad.Layout.WindowNavigation      as Nav
@@ -122,7 +125,7 @@ onedarkPrompt = def
       -- Location
     , Prompt.height = 26
     , Prompt.position = Prompt.CenteredAt { Prompt.xpCenterY = 0.988, Prompt.xpWidth = 0.15 }
-    -- Autocomplete
+      -- Autocomplete
     , Prompt.historySize = 256
     , Prompt.historyFilter = Prompt.uniqSort
     , Prompt.showCompletionOnTab = False
@@ -462,10 +465,6 @@ myWorkspaceNameKeys =
 named name = Renamed.renamed [Renamed.Replace name]
 
 padRight totalWidth string = string ++ replicate (totalWidth - length string) ' '
-
-infixr 0 >>=?
-(>>=?) :: Monad m => m (Maybe a) -> (a -> m ()) -> m ()
-m >>=? f = m >>= maybe (return ()) f
 
 -- * Main
 

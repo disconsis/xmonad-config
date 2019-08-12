@@ -105,7 +105,7 @@ manage :: LayoutClass l Window
 manage pp config = do
     client <- Polybar.init
     return $ ManageDocks.docks $ config
-      { startupHook = spawnOnce "~/.config/polybar/launch.sh" >> startupHook config
+      { startupHook = spawnOnce "~/.config/polybar/launch.sh" <+> startupHook config
       , layoutHook = ManageDocks.avoidStruts $ layoutHook config
       , logHook = (dynamicLogWithPP =<< (dbusPP client) <$> pp) <+> logHook config
       }
