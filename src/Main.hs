@@ -47,6 +47,7 @@ import qualified XMonad.Actions.WorkspaceNames       as WorkspaceNames
 
 import qualified XMonad.Util.Cursor                  as Cursor
 import qualified XMonad.Util.EZConfig                as EZConfig
+import qualified XMonad.Util.Paste                   as Paste
 import qualified XMonad.Util.WorkspaceCompare        as WorkspaceCompare
 
 import           Color
@@ -324,32 +325,34 @@ myControlKeys =
 -- ** Media
 
 myMediaKeys =
-    fmap spawn <$>
     [ -- volume
-      ("<XF86AudioLowerVolume>", printf "pamixer --allow-boost --decrease %d" volumeStep)
+      ("<XF86AudioLowerVolume>", spawn $ printf "pamixer --allow-boost --decrease %d" volumeStep)
     , ("<XF86AudioRaiseVolume>", raiseVolume)
-    , ("<XF86AudioMute>"       , "pamixer --toggle-mute")
+    , ("<XF86AudioMute>"       , spawn "pamixer --toggle-mute")
       -- player (e.g. Spotify)
-    , ("<XF86AudioNext>", "playerctl next")
-    , ("<XF86AudioPrev>", "playerctl previous")
-    , ("<XF86AudioPlay>", "playerctl play-pause")
+    , ("<XF86AudioNext>", spawn "playerctl next")
+    , ("<XF86AudioPrev>", spawn "playerctl previous")
+    , ("<XF86AudioPlay>", spawn "playerctl play-pause")
       -- touchscreen
-    , ("<XF86Search>", "xinput-toggle -r elan -n")
+    , ("<XF86Search>", spawn "xinput-toggle -r elan -n")
       -- brightness
     , ("M-["  , setBrightness $ show brightnessStep ++ "%-")
     , ("M-]"  , setBrightness $ show brightnessStep ++ "%+")
     , ("M-S-[", setBrightness "1%")
     , ("M-S-]", setBrightness "100%")
+      -- F11 without Fn key
+    , ("<Print>", Paste.sendKey Paste.noModMask xK_F11)
     ]
     where
       volumeLimit = 150 :: Int
       volumeStep = 5 :: Int
       raiseVolume =
+          spawn $
           printf "[ $(pamixer --get-volume) -le %d ] && pamixer --allow-boost --increase %d"
               (volumeLimit - volumeStep) volumeStep
 
       brightnessStep = 2
-      setBrightness val = printf "sudo brightnessctl -d intel_backlight set %s" val
+      setBrightness val = spawn $ printf "sudo brightnessctl -d intel_backlight set %s" val
 
 -- ** Movement
 
@@ -381,10 +384,10 @@ myWorkspaceMovementKeys =
                           , ("M-S-", windows . viewShift)
                           , ("M-C-", WorkspaceNames.swapWithCurrent)
                           ]
-      , (key, ws) <- zip keys_ myWorkspaces
+      , (key, ws) <- zip keys myWorkspaces
     ]
     where
-      keys_ = fmap (:[]) $ ['0'..'9'] ++ ['-', '=']
+      keys = fmap return $ ['0'..'9'] ++ ['-', '=']
       viewShift = liftM2 (.) W.greedyView W.shift
 
 
@@ -398,8 +401,8 @@ myScreenMovementKeys =
           currentScreen <- W.screen <$> W.current <$> gets windowset
           Warp.warpToScreen currentScreen (1/2) (1/2)
           -- move the cursor a little bit to get `unclutter` to show it
-          spawn "xdotool mousemove_relative -- 2 0"
-          spawn "xdotool mousemove_relative -- -2 0"
+          spawn "xdotool mousemove_relative -- 1 0"
+          spawn "xdotool mousemove_relative -- -1 0"
 
       swapScreens = do
           currentWs <- W.tag . W.workspace . W.current <$> gets windowset
@@ -450,7 +453,12 @@ myInfoKeys =
     fmap spawn <$>
     [ ("M-i n", "nerdfont-dmenu.sh")
     , ("M-i l", "google-chrome-app http://detexify.kirelabs.org/classify.html")
+    , ("M-i u", copyUniversityId)
     ]
+    where
+      copyUniversityId =
+          "echo 'N11092138' | xclip -selection clipboard;\
+          \notify-send 'University Info' 'Copied University ID to clipboard'"
 
 -- ** Naming workspaces
 

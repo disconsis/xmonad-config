@@ -8,8 +8,10 @@ module Polybar ( MouseButton(..)
                ) where
 
 import qualified Codec.Binary.UTF8.String     as UTF8
+
 import qualified DBus
 import qualified DBus.Client                  as DBus
+
 import           Text.Printf
 
 import           XMonad
