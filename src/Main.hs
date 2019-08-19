@@ -23,7 +23,7 @@ import qualified XMonad.Prompt                       as Prompt
 import           XMonad.Hooks.DynamicLog
 import           XMonad.Hooks.EwmhDesktops           (ewmh)
 import qualified XMonad.Hooks.ManageDocks            as ManageDocks
-import           XMonad.Hooks.ManageHelpers
+import           XMonad.Hooks.ManageHelpers          hiding (currentWs)
 
 import qualified XMonad.Layout.Combo                 as Combo
 import qualified XMonad.Layout.Decoration            as Decoration
@@ -380,15 +380,16 @@ myWindowMovementKeys =
 myWorkspaceMovementKeys :: [(String, X ())]
 myWorkspaceMovementKeys =
     [ (prefix ++ key, func ws)
-      | (prefix, func) <- [ ("M-"  , windows . W.greedyView)
-                          , ("M-S-", windows . viewShift)
+      | (prefix, func) <- [ ("M-"  , viewWorkspace)
+                          , ("M-S-", viewShift)
                           , ("M-C-", WorkspaceNames.swapWithCurrent)
                           ]
       , (key, ws) <- zip keys myWorkspaces
     ]
     where
       keys = fmap return $ ['0'..'9'] ++ ['-', '=']
-      viewShift = liftM2 (.) W.greedyView W.shift
+      viewShift = windows . (liftM2 (.) W.greedyView W.shift)
+      viewWorkspace ws =  windows (W.view ws) >> placeCursorMiddle
 
 
 myScreenMovementKeys =
@@ -398,16 +399,15 @@ myScreenMovementKeys =
     where
       switchScreen = do
           CycleWS.nextScreen
-          currentScreen <- W.screen <$> W.current <$> gets windowset
-          Warp.warpToScreen currentScreen (1/2) (1/2)
+          placeCursorMiddle
           -- move the cursor a little bit to get `unclutter` to show it
           spawn "xdotool mousemove_relative -- 1 0"
           spawn "xdotool mousemove_relative -- -1 0"
 
       swapScreens = do
-          currentWs <- W.tag . W.workspace . W.current <$> gets windowset
+          ws <- currentWs
           CycleWS.nextScreen
-          windows $ W.greedyView currentWs
+          windows $ W.greedyView ws
 
 -- ** Resize
 
@@ -473,6 +473,15 @@ myWorkspaceNameKeys =
 named name = Renamed.renamed [Renamed.Replace name]
 
 padRight totalWidth string = string ++ replicate (totalWidth - length string) ' '
+
+currentScreen :: X ScreenId
+currentScreen = W.screen <$> W.current <$> gets windowset
+
+currentWs :: X WorkspaceId
+currentWs = W.currentTag <$> gets windowset
+
+placeCursorMiddle :: X ()
+placeCursorMiddle = currentScreen >>= \screen -> Warp.warpToScreen screen (1/2) (1/2)
 
 -- * Main
 
