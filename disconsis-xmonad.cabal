@@ -10,6 +10,7 @@ executable disconsis-xmonad
 
   other-modules: Polybar
                , Color
+               , SmartTabBar
 
   hs-source-dirs:
       src
@@ -23,5 +24,11 @@ executable disconsis-xmonad
                , X11
                , utf8-string
                , dbus
+               , turtle
+               , extra
+               , text
+               , foldl
+               , mtl
+               , transformers
 
   default-language: Haskell2010

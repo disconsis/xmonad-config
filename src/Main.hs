@@ -1,26 +1,41 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main (main) where
 
 -- * Imports
 
+import qualified Control.Foldl                       as Fold
 import           Control.Monad
+import           Control.Monad.Extra
+import Control.Monad.Trans
+import Control.Monad.Trans.Maybe
+
+import           Numeric.Natural
 
 import           Data.List
 import           Data.Maybe
+import qualified Data.Text                           as T
+import Data.Char
 
 import           System.Exit
 
 import           Text.Printf                         (printf)
+import Text.Read (readMaybe)
 
 import           XMonad                              hiding ((|||))
 import qualified XMonad.StackSet                     as W
 
 import qualified XMonad.Prompt                       as Prompt
+import qualified XMonad.Prompt.XMonad                as Prompt
+import qualified XMonad.Prompt.Input                 as Prompt
+import XMonad.Prompt.Input  ((?+))
 
 import           XMonad.Hooks.DynamicLog
+import           XMonad.Hooks.DynamicProperty
 import           XMonad.Hooks.EwmhDesktops           (ewmh)
 import qualified XMonad.Hooks.ManageDocks            as ManageDocks
 import           XMonad.Hooks.ManageHelpers          hiding (currentWs)
@@ -29,6 +44,7 @@ import qualified XMonad.Layout.Combo                 as Combo
 import qualified XMonad.Layout.Decoration            as Decoration
 import qualified XMonad.Layout.Gaps                  as Gaps
 import           XMonad.Layout.LayoutCombinators
+import qualified XMonad.Layout.LimitWindows          as LimitWindows
 import qualified XMonad.Layout.MultiToggle           as MultiToggle
 import           XMonad.Layout.MultiToggle.Instances (StdTransformers (..))
 import qualified XMonad.Layout.NoBorders             as Borders
@@ -42,13 +58,17 @@ import qualified XMonad.Layout.WindowNavigation      as Nav
 
 import qualified XMonad.Actions.CycleWS              as CycleWS
 import qualified XMonad.Actions.GroupNavigation      as GroupNavigation
+import qualified XMonad.Actions.SpawnOn              as SpawnOn
 import qualified XMonad.Actions.Warp                 as Warp
 import qualified XMonad.Actions.WorkspaceNames       as WorkspaceNames
 
 import qualified XMonad.Util.Cursor                  as Cursor
+import qualified XMonad.Util.ExtensibleState         as ExtState
 import qualified XMonad.Util.EZConfig                as EZConfig
 import qualified XMonad.Util.Paste                   as Paste
 import qualified XMonad.Util.WorkspaceCompare        as WorkspaceCompare
+
+import           Turtle                              hiding (printf)
 
 import           Color
 import           Polybar
@@ -63,14 +83,30 @@ polybarPP =
 -- *** Theme
 onedarkPP :: PP
 onedarkPP = PP
-    { ppCurrent          = Polybar.format [Foreground onedarkBlack, Background onedarkGreen, Underline onedarkGreenDarker] . pad
-    , ppVisible          = Polybar.format [Foreground onedarkGreen,  Background grey, Underline onedarkGreen] . pad
-    , ppVisibleNoWindows = Just $ Polybar.format [Foreground onedarkGrey,  Background grey, Underline onedarkGrey] . pad
-    , ppHidden           = Polybar.format [Foreground onedarkGreen, Underline onedarkGreen] . pad
-    , ppHiddenNoWindows  = Polybar.format [Foreground grey] . pad
-    , ppUrgent           = Polybar.format [Foreground onedarkBlack, Background onedarkRed] . pad
-    , ppTitle            = Polybar.format [Foreground onedarkGrey, Offset 20] . shorten 100
-    , ppLayout           = Polybar.format [Foreground onedarkYellow] . padRight layoutDescriptionWidth
+    { ppCurrent          = Polybar.format [ Foreground onedarkBlack
+                                          , Background onedarkGreen
+                                          , Underline onedarkGreenDarker
+                                          ] . pad
+    , ppVisible          = Polybar.format [ Foreground onedarkGreen
+                                          , Background grey
+                                          , Underline onedarkGreen
+                                          ] . pad
+    , ppVisibleNoWindows = Just $ Polybar.format [ Foreground onedarkGrey
+                                                 , Background grey
+                                                 , Underline onedarkGrey
+                                                 ] . pad
+    , ppHidden           = Polybar.format [ Foreground onedarkGreen
+                                          , Underline onedarkGreen
+                                          ] . pad
+    , ppHiddenNoWindows  = Polybar.format [ Foreground grey ] . pad
+    , ppUrgent           = Polybar.format [ Foreground onedarkBlack
+                                          , Background onedarkRed
+                                          ] . pad
+    , ppTitle            = Polybar.format [ Foreground onedarkGrey
+                                          , Offset 20
+                                          ] . shorten 50
+    , ppLayout           = Polybar.format [ Foreground onedarkYellow ]
+                           . padRight layoutDescriptionWidth
     , ppSep              = "  "
     , ppWsSep            = " "
     , ppTitleSanitize    = filter (`notElem` ['%', '{', '}'])
@@ -80,7 +116,8 @@ onedarkPP = PP
     , ppOutput           = const $ return ()
     }
     where
-      layoutFirstOrder (workspaces : layout : title : extras) = layout : workspaces : title : extras
+      layoutFirstOrder (workspaces : layout : title : extras) =
+        layout : workspaces : title : extras
       layoutFirstOrder other = other
 
 
@@ -92,7 +129,8 @@ namedGotoPP pp = do
     return $ pp
         { ppCurrent = ppCurrent pp . namedGoto names
         , ppVisible = ppVisible pp . namedGoto names
-        , ppVisibleNoWindows = ppVisibleNoWindows pp >>= (\f -> Just $ f . namedGoto names)
+        , ppVisibleNoWindows =
+            ppVisibleNoWindows pp >>= \f -> Just $ f . namedGoto names
         , ppHidden = ppHidden pp . namedGoto names
         , ppHiddenNoWindows = ppHiddenNoWindows pp . namedGoto names
         , ppUrgent = ppUrgent pp . namedGoto names
@@ -117,20 +155,22 @@ myWorkspaces =
 
 -- * Prompt
 
-onedarkPrompt :: Prompt.XPConfig
-onedarkPrompt = def
+blackWhitePrompt :: Prompt.XPConfig
+blackWhitePrompt = def
     { -- Look
       Prompt.font = "xft:Iosevka Nerd Font:pixelsize=15"
     , Prompt.bgColor = white
     , Prompt.fgColor = black
       -- Location
     , Prompt.height = 26
-    , Prompt.position = Prompt.CenteredAt { Prompt.xpCenterY = 0.988, Prompt.xpWidth = 0.15 }
+    , Prompt.position = Prompt.CenteredAt { Prompt.xpCenterY = 0.988
+                                          , Prompt.xpWidth = 0.15
+                                          }
       -- Autocomplete
     , Prompt.historySize = 256
     , Prompt.historyFilter = Prompt.uniqSort
     , Prompt.showCompletionOnTab = False
-    , Prompt.searchPredicate = isPrefixOf
+    , Prompt.searchPredicate = \string completion -> isPrefixOf (toLower <$> string) (toLower <$> completion)
     , Prompt.autoComplete = Just 2000
     , Prompt.completionKey = (0, xK_Tab)
     , Prompt.maxComplRows = Just 5
@@ -199,9 +239,13 @@ myGaps =
 
 -- ** Tall
 
-myTall :: Decoration.ModifiedLayout Renamed.Rename (Decoration.ModifiedLayout Spacing.Spacing Tall) Window
+myTall :: Decoration.ModifiedLayout Renamed.Rename
+          (Decoration.ModifiedLayout LimitWindows.LimitWindows
+          (Decoration.ModifiedLayout Spacing.Spacing Tall))
+          Window
 myTall =
     named "Windowed" $
+    LimitWindows.limitWindows 3 $
     mySpacing $
     Tall { tallNMaster        = 1
          , tallRatioIncrement = (3/100)
@@ -274,17 +318,32 @@ myTwoPane =
 -- * ManageHook
 
 myManageHook = composeAll
-    [ myAppBorderSettings ]
+    [ myAppBorderSettings
+    , myWindowShiftStaticSettings
+    , SpawnOn.manageSpawn
+    ]
 
 -- ** App border settings
 
 myAppBorderSettings = composeOne
     [ className =? "albert" -?> Borders.hasBorder False ]
 
+-- ** Window shift settings (depending on static properties)
+
+myWindowShiftStaticSettings = composeOne $
+  [ -- only static properties here
+  ]
+
 -- * HandleEvent
 
 myHandleEventHook =
+    myWindowShiftDynamicSettings <+>
     Borders.borderEventHook
+
+-- ** Window shift settings (depending on dynamic properties)
+myWindowShiftDynamicSettings = dynamicPropertyChange "WM_CLASS" $ composeAll $
+  [ className =? "Spotify" --> doShift wsMusic ]
+
 
 -- * Logging
 
@@ -310,29 +369,49 @@ myKeys config =
 
 -- ** Control
 
+cmdList :: [(String, X ())]
+cmdList = [ ("set max volume", setMaxVolume) ]
+  where
+    setMaxVolume = do
+      volString <- Prompt.inputPrompt blackWhitePrompt "Max Volume"
+      fromMaybe mempty $ do
+        maxVol <- volString >>= readMaybe
+        return $ ExtState.put $ Volume maxVol
+
 myControlKeys :: [(String, X ())]
 myControlKeys =
-    [ ("M-`", spawn "xmonad --recompile && xmonad --restart; sleep 1; notify-send 'XMonad reloaded'" >> refresh)
+    [ ("M-`", recompileXMonad)
     , ("M-S-C-`", io $ exitWith ExitSuccess)
     , ("M-S-<Space>", updateAllLayouts $ Layout myLayoutHook)
     , ("M-q", kill)
+    , ("M-;", Prompt.xmonadPromptC cmdList blackWhitePrompt)
     ]
     where
       updateAllLayouts :: Layout Window -> X ()
       updateAllLayouts layout =
           sequence_ [updateLayout ws (Just layout) | ws <- myWorkspaces]
 
+      recompileXMonad =
+          spawn "xmonad --recompile && xmonad --restart;\
+                \sleep 1; notify-send 'XMonad reloaded'"
+          >> refresh
+
 -- ** Media
+
+newtype Volume = Volume Natural
+
+instance ExtensionClass Volume where
+  initialValue = Volume 150
 
 myMediaKeys =
     [ -- volume
-      ("<XF86AudioLowerVolume>", spawn $ printf "pamixer --allow-boost --decrease %d" volumeStep)
+      ("<XF86AudioLowerVolume>", reduceVolume)
     , ("<XF86AudioRaiseVolume>", raiseVolume)
-    , ("<XF86AudioMute>"       , spawn "pamixer --toggle-mute")
+    , ("<XF86AudioMute>"       , toggleMute)
       -- player (e.g. Spotify)
     , ("<XF86AudioNext>", spawn "playerctl next")
     , ("<XF86AudioPrev>", spawn "playerctl previous")
-    , ("<XF86AudioPlay>", spawn "playerctl play-pause")
+    , ("<XF86AudioPlay>", ensureSpotify >> spawn "playerctl play-pause")
       -- touchscreen
     , ("<XF86Search>", spawn "xinput-toggle -r elan -n")
       -- brightness
@@ -342,17 +421,40 @@ myMediaKeys =
     , ("M-S-]", setBrightness "100%")
       -- F11 without Fn key
     , ("<Print>", Paste.sendKey Paste.noModMask xK_F11)
+     -- Wifi
+    , ("<Home>", spawn "sudo connman_dmenu")
     ]
     where
-      volumeLimit = 150 :: Int
-      volumeStep = 5 :: Int
-      raiseVolume =
-          spawn $
-          printf "[ $(pamixer --get-volume) -le %d ] && pamixer --allow-boost --increase %d"
-              (volumeLimit - volumeStep) volumeStep
+      volumeStep = 5
 
       brightnessStep = 2
-      setBrightness val = spawn $ printf "sudo brightnessctl -d intel_backlight set %s" val
+
+      raiseVolume = do
+          (Volume maxVolume) <- ExtState.get
+          spawn $ printf "[ $(pamixer --get-volume) -le %d ] \
+                         \&& pamixer --allow-boost --increase %d"
+              (maxVolume - volumeStep) volumeStep
+
+      reduceVolume =
+          spawn $ printf "pamixer --allow-boost --decrease %d" volumeStep
+
+      toggleMute = spawn "pamixer --toggle-mute"
+
+      setBrightness :: String -> X ()
+      setBrightness val =
+        spawn $ printf "sudo brightnessctl -d intel_backlight set %s" val
+
+
+-- open spotify if no players running
+ensureSpotify :: X ()
+ensureSpotify =
+  spawn "ensure-spotify.sh"
+  -- numPlayers <- fold (inshell "playerctl --list-all" empty) Fold.length
+  -- spawn $ printf "kitty --title=%d" numPlayers
+  -- if numPlayers == 0 then
+  --   SpawnOn.spawnOn wsMusic "spotify-pause-launch.sh"
+  -- else
+  --   spawn "kitty"
 
 -- ** Movement
 
@@ -423,9 +525,10 @@ myLayoutKeys =
     [ -- switch layouts
       ("M-w", jumpToLayout myTall)
     , ("M-t", jumpToLayout myTabbed)
-    , ("M-p", jumpToLayout myTwoPane)
+      -- , ("M-p", jumpToLayout myTwoPane)
       -- modify spacing, full etc
-    , ("M-f", sendMessage (MultiToggle.Toggle NBFULL) >> sendMessage ManageDocks.ToggleStruts)
+    , ("M-f", sendMessage (MultiToggle.Toggle NBFULL)
+        >> sendMessage ManageDocks.ToggleStruts)
     , ("M-S-f", sendMessage ManageDocks.ToggleStruts)
     ]
     where
@@ -441,7 +544,7 @@ myLauncherKeys =
     , ("M-u g",   "google-chrome-stable")
     , ("M-u r",   "$TERMINAL ranger")
     , ("M-u e",   "emacsclientserver.sh")
-    , ("M-u S-e", "emacs")
+    , ("M-u S-e", "emacs --debug-init")
     , ("M-u q",   "qutebrowser")
     , ("M-u w",   "whatsapp.sh")
     , ("M-u m",   "gmail.sh")
@@ -454,6 +557,7 @@ myInfoKeys =
     [ ("M-i n", "nerdfont-dmenu.sh")
     , ("M-i l", "google-chrome-app http://detexify.kirelabs.org/classify.html")
     , ("M-i u", copyUniversityId)
+    , ("M-i i", "xdg-open ~/refer/iris-documentation.pdf")
     ]
     where
       copyUniversityId =
@@ -463,16 +567,17 @@ myInfoKeys =
 -- ** Naming workspaces
 
 myWorkspaceNameKeys =
-    [ ("M-r", WorkspaceNames.renameWorkspace onedarkPrompt)
-    , ("M-S-r", WorkspaceNames.setCurrentWorkspaceName "")
-    , ("M-C-r", forM_ myWorkspaces (flip WorkspaceNames.setWorkspaceName ""))
+    [ ("M-r", WorkspaceNames.renameWorkspace blackWhitePrompt)
+    , ("M-S-r", WorkspaceNames.setCurrentWorkspaceName mempty)
+    , ("M-C-r", forM_ myWorkspaces (flip WorkspaceNames.setWorkspaceName mempty))
     ]
 
 -- * Utils
 
 named name = Renamed.renamed [Renamed.Replace name]
 
-padRight totalWidth string = string ++ replicate (totalWidth - length string) ' '
+padRight totalWidth string =
+  string ++ replicate (totalWidth - length string) ' '
 
 currentScreen :: X ScreenId
 currentScreen = W.screen <$> W.current <$> gets windowset
@@ -481,7 +586,8 @@ currentWs :: X WorkspaceId
 currentWs = W.currentTag <$> gets windowset
 
 placeCursorMiddle :: X ()
-placeCursorMiddle = currentScreen >>= \screen -> Warp.warpToScreen screen (1/2) (1/2)
+placeCursorMiddle =
+  currentScreen >>= \screen -> Warp.warpToScreen screen (1/2) (1/2)
 
 -- * Main
 
