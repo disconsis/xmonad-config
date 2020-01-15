@@ -10,7 +10,7 @@ executable disconsis-xmonad
 
   other-modules: Polybar
                , Color
-               , SmartTabBar
+               , Mode
 
   hs-source-dirs:
       src

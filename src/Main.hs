@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Main (main) where
@@ -11,34 +11,36 @@ module Main (main) where
 import qualified Control.Foldl                       as Fold
 import           Control.Monad
 import           Control.Monad.Extra
-import Control.Monad.Trans
-import Control.Monad.Trans.Maybe
+import           Control.Monad.Trans
+import           Control.Monad.Trans.Maybe
 
 import           Numeric.Natural
 
+import           Data.Char
 import           Data.List
+import qualified Data.Map                            as M
 import           Data.Maybe
 import qualified Data.Text                           as T
-import Data.Char
 
 import           System.Exit
 
 import           Text.Printf                         (printf)
-import Text.Read (readMaybe)
+import           Text.Read                           (readMaybe)
 
 import           XMonad                              hiding ((|||))
 import qualified XMonad.StackSet                     as W
 
 import qualified XMonad.Prompt                       as Prompt
-import qualified XMonad.Prompt.XMonad                as Prompt
+import           XMonad.Prompt.Input                 ((?+))
 import qualified XMonad.Prompt.Input                 as Prompt
-import XMonad.Prompt.Input  ((?+))
+import qualified XMonad.Prompt.XMonad                as Prompt
 
 import           XMonad.Hooks.DynamicLog
 import           XMonad.Hooks.DynamicProperty
 import           XMonad.Hooks.EwmhDesktops           (ewmh)
 import qualified XMonad.Hooks.ManageDocks            as ManageDocks
 import           XMonad.Hooks.ManageHelpers          hiding (currentWs)
+import           XMonad.Hooks.SetWMName              (setWMName)
 
 import qualified XMonad.Layout.Combo                 as Combo
 import qualified XMonad.Layout.Decoration            as Decoration
@@ -48,6 +50,7 @@ import qualified XMonad.Layout.LimitWindows          as LimitWindows
 import qualified XMonad.Layout.MultiToggle           as MultiToggle
 import           XMonad.Layout.MultiToggle.Instances (StdTransformers (..))
 import qualified XMonad.Layout.NoBorders             as Borders
+import           XMonad.Layout.OneBig
 import qualified XMonad.Layout.PerWorkspace          as PerWorkspace
 import qualified XMonad.Layout.Renamed               as Renamed
 import qualified XMonad.Layout.Spacing               as Spacing
@@ -58,6 +61,7 @@ import qualified XMonad.Layout.WindowNavigation      as Nav
 
 import qualified XMonad.Actions.CycleWS              as CycleWS
 import qualified XMonad.Actions.GroupNavigation      as GroupNavigation
+import qualified XMonad.Actions.ShowText             as ShowText
 import qualified XMonad.Actions.SpawnOn              as SpawnOn
 import qualified XMonad.Actions.Warp                 as Warp
 import qualified XMonad.Actions.WorkspaceNames       as WorkspaceNames
@@ -71,6 +75,7 @@ import qualified XMonad.Util.WorkspaceCompare        as WorkspaceCompare
 import           Turtle                              hiding (printf)
 
 import           Color
+import qualified Mode
 import           Polybar
 
 -- * Features
@@ -112,13 +117,34 @@ onedarkPP = PP
     , ppTitleSanitize    = filter (`notElem` ['%', '{', '}'])
     , ppOrder            = layoutFirstOrder
     , ppSort             = WorkspaceCompare.getSortByIndex
-    , ppExtras           = []
+    , ppExtras           = [hiddenWindows, currentMode]
     , ppOutput           = const $ return ()
     }
     where
       layoutFirstOrder (workspaces : layout : title : extras) =
-        layout : workspaces : title : extras
+        [layout] ++ extras ++ [workspaces, title]
       layoutFirstOrder other = other
+
+      -- show currently active mode
+      currentMode :: X (Maybe String)
+      currentMode = do
+        (Mode.ActiveMode mode) <- ExtState.get
+        return $ show <$> mode
+
+      -- show number of hidden windows while in 'myTall' layout
+      hiddenWindows :: X (Maybe String)
+      hiddenWindows = do
+        workspace <- gets (W.workspace . W.current . windowset)
+        let layout = W.layout workspace
+        WindowLimitActive isLimitActive <- ExtState.get
+        let numActualWindows = length $ W.integrate' $ W.stack workspace
+        let numHiddenWindows = numActualWindows - myWindowLimit
+        if (description layout == description myTall) && isLimitActive && (numHiddenWindows > 0) then
+            return $ Just $
+            Polybar.format [ Foreground onedarkYellow ] $
+            printf "(H:%d)" numHiddenWindows
+        else
+            return Nothing
 
 
 -- *** Workspace buttons, Named workspaces
@@ -180,6 +206,7 @@ blackWhitePrompt = def
 
 myStartupHook :: X ()
 myStartupHook = do
+    setWMName "LG3D"
     EZConfig.checkKeymap myConfig myKeymap
     Cursor.setDefaultCursor Cursor.xC_left_ptr
     spawn "pgrep unclutter || unclutter --timeout 3"
@@ -191,7 +218,7 @@ myLayoutHook =
     Borders.smartBorders $
     myPerWorkspaceLayouts $
     MultiToggle.mkToggle (MultiToggle.single NBFULL) $
-    myTall ||| myTabbed ||| myTwoPane
+    myTall ||| myTabbed ||| myTwoPane ||| myOneBig
 
 
 layoutDescriptionWidth =
@@ -199,6 +226,7 @@ layoutDescriptionWidth =
         [ description myTall
         , description myTabbed
         , description myTwoPane
+        , description myOneBig
         ]
 
 -- ** Per workspace layouts
@@ -239,6 +267,8 @@ myGaps =
 
 -- ** Tall
 
+myWindowLimit = 3
+
 myTall :: Decoration.ModifiedLayout Renamed.Rename
           (Decoration.ModifiedLayout LimitWindows.LimitWindows
           (Decoration.ModifiedLayout Spacing.Spacing Tall))
@@ -251,6 +281,23 @@ myTall =
          , tallRatioIncrement = (3/100)
          , tallRatio          = (1/2)
          }
+
+
+-- *** Toggle window limit
+
+newtype WindowLimitActive = WindowLimitActive Bool
+
+instance ExtensionClass WindowLimitActive where
+  initialValue = WindowLimitActive True
+
+toggleWindowLimit :: X ()
+toggleWindowLimit = do
+  WindowLimitActive isActive <- ExtState.get
+  if isActive
+  then LimitWindows.setLimit 500
+  else LimitWindows.setLimit myWindowLimit
+  ExtState.put $ WindowLimitActive (not isActive)
+
 
 -- ** Tabbed
 
@@ -315,6 +362,11 @@ myTwoPane =
                     , (Gaps.R, finalGap)
                     ]
 
+-- ** OneBig
+myOneBig =
+  named "Big" $
+  OneBig (3/4) (3/4)
+
 -- * ManageHook
 
 myManageHook = composeAll
@@ -355,6 +407,7 @@ myLogHook =
 
 myKeymap = concat
     [ myControlKeys
+    , myModeKeys
     , myMediaKeys
     , myMovementKeys
     , myResizeKeys
@@ -396,6 +449,30 @@ myControlKeys =
                 \sleep 1; notify-send 'XMonad reloaded'"
           >> refresh
 
+-- ** Modes
+
+myModeKeys =
+  (fmap Mode.activate) <$>
+  [ ("M-<Left>", vimNavMode)
+  ]
+
+-- *** Vim Navigation Mode
+
+vimNavMap :: M.Map (KeyMask, KeySym) (X ())
+vimNavMap = uncurry Paste.sendKey <$> M.fromList
+  [ ((0, xK_h) , (0, xK_Left))
+  , ((0, xK_j) , (0, xK_Down))
+  , ((0, xK_k) , (0, xK_Up))
+  , ((0, xK_l) , (0, xK_Right))
+  ]
+
+vimNavMode :: Mode.Mode
+vimNavMode = Mode.Mode
+  { Mode.name     = "VimNav"
+  , Mode.keymap   = vimNavMap
+  , Mode.modeType = Mode.Passthrough (0, xK_Escape)
+  }
+
 -- ** Media
 
 newtype Volume = Volume Natural
@@ -421,8 +498,6 @@ myMediaKeys =
     , ("M-S-]", setBrightness "100%")
       -- F11 without Fn key
     , ("<Print>", Paste.sendKey Paste.noModMask xK_F11)
-     -- Wifi
-    , ("<Home>", spawn "sudo connman_dmenu")
     ]
     where
       volumeStep = 5
@@ -524,16 +599,20 @@ myResizeKeys =
 myLayoutKeys =
     [ -- switch layouts
       ("M-w", jumpToLayout myTall)
+    , ("M-S-w", toggleWindowLimit)
     , ("M-t", jumpToLayout myTabbed)
-      -- , ("M-p", jumpToLayout myTwoPane)
+    , ("M-p", jumpToLayout myOneBig)
       -- modify spacing, full etc
-    , ("M-f", sendMessage (MultiToggle.Toggle NBFULL)
-        >> sendMessage ManageDocks.ToggleStruts)
+    , ("M-f", fullscreen)
     , ("M-S-f", sendMessage ManageDocks.ToggleStruts)
     ]
     where
       jumpToLayout :: LayoutClass layout a => layout a -> X ()
       jumpToLayout = sendMessage . JumpToLayout . description
+
+      fullscreen = do
+        sendMessage $ MultiToggle.Toggle NBFULL
+        sendMessage ManageDocks.ToggleStruts
 
 
 -- ** Launcher
