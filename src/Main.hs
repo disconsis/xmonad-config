@@ -57,7 +57,6 @@ import qualified XMonad.Layout.Spacing               as Spacing
 import qualified XMonad.Layout.TabBarDecoration      as TabDeco
 import qualified XMonad.Layout.Tabbed                as Tabbed
 import           XMonad.Layout.TwoPane               (TwoPane (..))
-import qualified XMonad.Layout.WindowNavigation      as Nav
 
 import qualified XMonad.Actions.CycleWS              as CycleWS
 import qualified XMonad.Actions.GroupNavigation      as GroupNavigation
@@ -218,14 +217,13 @@ myLayoutHook =
     Borders.smartBorders $
     myPerWorkspaceLayouts $
     MultiToggle.mkToggle (MultiToggle.single NBFULL) $
-    myTall ||| myTabbed ||| myTwoPane ||| myOneBig
+    myTall ||| myTabbed ||| myOneBig
 
 
 layoutDescriptionWidth =
     maximum . fmap length $
         [ description myTall
         , description myTabbed
-        , description myTwoPane
         , description myOneBig
         ]
 
@@ -337,31 +335,6 @@ onedarkTabbedTheme = def
       inactiveColor = onedarkBlack
       urgentColor = onedarkRed
 
--- ** TwoPane
-
-myTwoPane =
-    named "TwoPane" $
-    Borders.noBorders $
-    Combo.combineTwo
-        (TwoPane delta ratio)
-        (leftGaps $ Tabbed.tabbedLeftAlways EmptyShrinker onedarkTabbedTheme)
-        (rightGaps $ Tabbed.tabbedRightAlways EmptyShrinker onedarkTabbedTheme)
-    where
-      delta = (3/100)
-      ratio = (1/2)
-      leftGaps =
-          Gaps.gaps [ (Gaps.U, finalGap)
-                    , (Gaps.D, finalGap)
-                    , (Gaps.L, finalGap)
-                    , (Gaps.R, finalGap `div` 2)
-                    ]
-      rightGaps =
-          Gaps.gaps [ (Gaps.U, finalGap)
-                    , (Gaps.D, finalGap)
-                    , (Gaps.L, finalGap `div` 2)
-                    , (Gaps.R, finalGap)
-                    ]
-
 -- ** OneBig
 myOneBig =
   named "Big" $
@@ -435,7 +408,6 @@ myControlKeys :: [(String, X ())]
 myControlKeys =
     [ ("M-`", recompileXMonad)
     , ("M-S-C-`", io $ exitWith ExitSuccess)
-    , ("M-S-<Space>", updateAllLayouts $ Layout myLayoutHook)
     , ("M-q", kill)
     , ("M-;", Prompt.xmonadPromptC cmdList blackWhitePrompt)
     ]
@@ -547,8 +519,6 @@ myWindowMovementKeys =
     , ("M-S-j", windows W.swapDown)
     , ("M-S-k", windows W.swapUp)
     , ("M-S-m", windows W.swapMaster)
-    , ("M-S-h", sendMessage $ Nav.Move Nav.L)
-    , ("M-S-l", sendMessage $ Nav.Move Nav.R)
     ]
     where focusLastWindow =
               GroupNavigation.nextMatch GroupNavigation.History (return True)
