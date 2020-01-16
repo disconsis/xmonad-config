@@ -11,6 +11,7 @@ executable disconsis-xmonad
   other-modules: Polybar
                , Color
                , Mode
+               , Utils
 
   hs-source-dirs:
       src

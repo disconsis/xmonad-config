@@ -8,11 +8,7 @@ module Main (main) where
 
 -- * Imports
 
-import qualified Control.Foldl                       as Fold
 import           Control.Monad
-import           Control.Monad.Extra
-import           Control.Monad.Trans
-import           Control.Monad.Trans.Maybe
 
 import           Numeric.Natural
 
@@ -20,7 +16,6 @@ import           Data.Char
 import           Data.List
 import qualified Data.Map                            as M
 import           Data.Maybe
-import qualified Data.Text                           as T
 
 import           System.Exit
 
@@ -31,7 +26,6 @@ import           XMonad                              hiding ((|||))
 import qualified XMonad.StackSet                     as W
 
 import qualified XMonad.Prompt                       as Prompt
-import           XMonad.Prompt.Input                 ((?+))
 import qualified XMonad.Prompt.Input                 as Prompt
 import qualified XMonad.Prompt.XMonad                as Prompt
 
@@ -42,7 +36,6 @@ import qualified XMonad.Hooks.ManageDocks            as ManageDocks
 import           XMonad.Hooks.ManageHelpers          hiding (currentWs)
 import           XMonad.Hooks.SetWMName              (setWMName)
 
-import qualified XMonad.Layout.Combo                 as Combo
 import qualified XMonad.Layout.Decoration            as Decoration
 import qualified XMonad.Layout.Gaps                  as Gaps
 import           XMonad.Layout.LayoutCombinators
@@ -54,15 +47,11 @@ import           XMonad.Layout.OneBig
 import qualified XMonad.Layout.PerWorkspace          as PerWorkspace
 import qualified XMonad.Layout.Renamed               as Renamed
 import qualified XMonad.Layout.Spacing               as Spacing
-import qualified XMonad.Layout.TabBarDecoration      as TabDeco
 import qualified XMonad.Layout.Tabbed                as Tabbed
-import           XMonad.Layout.TwoPane               (TwoPane (..))
 
 import qualified XMonad.Actions.CycleWS              as CycleWS
 import qualified XMonad.Actions.GroupNavigation      as GroupNavigation
-import qualified XMonad.Actions.ShowText             as ShowText
 import qualified XMonad.Actions.SpawnOn              as SpawnOn
-import qualified XMonad.Actions.Warp                 as Warp
 import qualified XMonad.Actions.WorkspaceNames       as WorkspaceNames
 
 import qualified XMonad.Util.Cursor                  as Cursor
@@ -71,11 +60,10 @@ import qualified XMonad.Util.EZConfig                as EZConfig
 import qualified XMonad.Util.Paste                   as Paste
 import qualified XMonad.Util.WorkspaceCompare        as WorkspaceCompare
 
-import           Turtle                              hiding (printf)
-
 import           Color
 import qualified Mode
 import           Polybar
+import           Utils
 
 -- * Features
 -- ** Polybar
@@ -128,7 +116,9 @@ onedarkPP = PP
       currentMode :: X (Maybe String)
       currentMode = do
         (Mode.ActiveMode mode) <- ExtState.get
-        return $ show <$> mode
+        return $
+          Polybar.format [ Foreground onedarkBlue ] <$>
+          show <$> mode
 
       -- show number of hidden windows while in 'myTall' layout
       hiddenWindows :: X (Maybe String)
@@ -167,18 +157,7 @@ namedGotoPP pp = do
             let action = Action LeftClick $ printf "xdotool set_desktop %d" wsNum
             return $ Polybar.format [action] (rename ws)
 
--- * Workspaces
-
-wsTodo  = "\xf00b"
-wsConf  = "\xf992"
-wsEntt  = "\xf880"
-wsMusic = "\xf001"
-wsComms = "\xf086"
-
-myWorkspaces =
-    [wsTodo] ++ fmap show [1..7] ++ [wsConf, wsEntt, wsMusic, wsComms]
-
--- * Prompt
+-- ** Prompt
 
 blackWhitePrompt :: Prompt.XPConfig
 blackWhitePrompt = def
@@ -200,6 +179,17 @@ blackWhitePrompt = def
     , Prompt.completionKey = (0, xK_Tab)
     , Prompt.maxComplRows = Just 5
     }
+
+-- ** Workspaces
+
+wsTodo  = "\xf00b"
+wsConf  = "\xf992"
+wsEntt  = "\xf880"
+wsMusic = "\xf001"
+wsComms = "\xf086"
+
+myWorkspaces =
+    [wsTodo] ++ fmap show [1..7] ++ [wsConf, wsEntt, wsMusic, wsComms]
 
 -- * Startup
 
@@ -412,10 +402,6 @@ myControlKeys =
     , ("M-;", Prompt.xmonadPromptC cmdList blackWhitePrompt)
     ]
     where
-      updateAllLayouts :: Layout Window -> X ()
-      updateAllLayouts layout =
-          sequence_ [updateLayout ws (Just layout) | ws <- myWorkspaces]
-
       recompileXMonad =
           spawn "xmonad --recompile && xmonad --restart;\
                 \sleep 1; notify-send 'XMonad reloaded'"
@@ -620,23 +606,6 @@ myWorkspaceNameKeys =
     , ("M-S-r", WorkspaceNames.setCurrentWorkspaceName mempty)
     , ("M-C-r", forM_ myWorkspaces (flip WorkspaceNames.setWorkspaceName mempty))
     ]
-
--- * Utils
-
-named name = Renamed.renamed [Renamed.Replace name]
-
-padRight totalWidth string =
-  string ++ replicate (totalWidth - length string) ' '
-
-currentScreen :: X ScreenId
-currentScreen = W.screen <$> W.current <$> gets windowset
-
-currentWs :: X WorkspaceId
-currentWs = W.currentTag <$> gets windowset
-
-placeCursorMiddle :: X ()
-placeCursorMiddle =
-  currentScreen >>= \screen -> Warp.warpToScreen screen (1/2) (1/2)
 
 -- * Main
 
