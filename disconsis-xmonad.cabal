@@ -25,10 +25,8 @@ executable disconsis-xmonad
                , X11
                , utf8-string
                , dbus
-               , turtle
                , extra
                , text
-               , foldl
                , mtl
                , transformers
 

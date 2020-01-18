@@ -11,6 +11,7 @@ import qualified XMonad.Util.ExtensibleState as XS
 import qualified XMonad.Util.Paste           as Paste
 
 import qualified Data.Map                    as M
+import           Data.Maybe
 
 import           Text.Printf
 
@@ -21,12 +22,14 @@ type Key = (KeyMask, KeySym)
 -- * Mode state
 
 -- |
+-- 'CapturePassthrough' triggers unbound keys in the underlying keymap,
+--   and sends them to the to focused window if unbound even there.
 -- 'Passthrough' sends unbound keys through to the focused window, but does not trigger associated X actions.
 -- 'IgnoreUnbound' completely ignores unbound keys.
 -- 'ExitOnUnbound' exits the mode on the first unbound input and gobbles it.
--- TODO: add a 'CapturePassthrough' type which triggers associated X actions for unbound keys in the main keymap.
 data ModeType
-  = Passthrough Key
+  = CapturePassthrough (M.Map Key (X ())) Key
+  | Passthrough Key
   | IgnoreUnbound Key
   | ExitOnUnbound
 
@@ -62,6 +65,11 @@ hydra mode = case modeType mode of
       (persisting . uncurry Paste.sendKey)
       (M.insert quitKey deactivate $ persisting <$> keymap mode)
 
+  CapturePassthrough baseMap quitKey ->
+    submapDefaultWithKey
+      (\key -> persisting $ fromMaybe (uncurry Paste.sendKey key) (M.lookup key baseMap))
+      (M.insert quitKey deactivate $ persisting <$> keymap mode)
+
   where
     persisting action = action >> hydra mode
     deactivate = XS.remove (ActiveMode $ Just mode) >> refresh
@@ -79,9 +87,10 @@ activate mode = do
 -- * Printing (modeline)
 
 instance Show ModeType where
-  show ExitOnUnbound     = "Exit"
-  show (IgnoreUnbound _) = "Ign"
-  show (Passthrough _)   = "Pass"
+  show ExitOnUnbound            = "Exit"
+  show (IgnoreUnbound _)        = "Ign"
+  show (Passthrough _)          = "pass"
+  show (CapturePassthrough _ _) = "Pass"
 
 instance Show Mode where
   show (Mode name _ modeType) =

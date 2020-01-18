@@ -411,7 +411,7 @@ myControlKeys =
 
 myModeKeys =
   (fmap Mode.activate) <$>
-  [ ("M-<Left>", vimNavMode)
+  [ ("M-<Down>", vimNavMode)
   ]
 
 -- *** Vim Navigation Mode
@@ -428,8 +428,10 @@ vimNavMode :: Mode.Mode
 vimNavMode = Mode.Mode
   { Mode.name     = "VimNav"
   , Mode.keymap   = vimNavMap
-  , Mode.modeType = Mode.Passthrough (0, xK_Escape)
+  , Mode.modeType = Mode.CapturePassthrough (myKeys myConfig') (0, xK_Escape)
   }
+  where
+    myConfig' = myConfig { layoutHook = Layout Full } -- layoutHook doesn't matter
 
 -- ** Media
 
@@ -482,12 +484,6 @@ myMediaKeys =
 ensureSpotify :: X ()
 ensureSpotify =
   spawn "ensure-spotify.sh"
-  -- numPlayers <- fold (inshell "playerctl --list-all" empty) Fold.length
-  -- spawn $ printf "kitty --title=%d" numPlayers
-  -- if numPlayers == 0 then
-  --   SpawnOn.spawnOn wsMusic "spotify-pause-launch.sh"
-  -- else
-  --   spawn "kitty"
 
 -- ** Movement
 
