@@ -428,10 +428,8 @@ vimNavMode :: Mode.Mode
 vimNavMode = Mode.Mode
   { Mode.name     = "VimNav"
   , Mode.keymap   = vimNavMap
-  , Mode.modeType = Mode.CapturePassthrough (myKeys myConfig') (0, xK_Escape)
+  , Mode.modeType = Mode.CapturePassthrough (0, xK_Escape)
   }
-  where
-    myConfig' = myConfig { layoutHook = Layout Full } -- layoutHook doesn't matter
 
 -- ** Media
 

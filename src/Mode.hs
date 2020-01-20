@@ -22,13 +22,14 @@ type Key = (KeyMask, KeySym)
 -- * Mode state
 
 -- |
+-- TODO: get submaps to work with unbound keys (currently those actions get postponed till the mode is active)
 -- 'CapturePassthrough' triggers unbound keys in the underlying keymap,
 --   and sends them to the to focused window if unbound even there.
 -- 'Passthrough' sends unbound keys through to the focused window, but does not trigger associated X actions.
 -- 'IgnoreUnbound' completely ignores unbound keys.
 -- 'ExitOnUnbound' exits the mode on the first unbound input and gobbles it.
 data ModeType
-  = CapturePassthrough (M.Map Key (X ())) Key
+  = CapturePassthrough Key
   | Passthrough Key
   | IgnoreUnbound Key
   | ExitOnUnbound
@@ -65,7 +66,9 @@ hydra mode = case modeType mode of
       (persisting . uncurry Paste.sendKey)
       (M.insert quitKey deactivate $ persisting <$> keymap mode)
 
-  CapturePassthrough baseMap quitKey ->
+  CapturePassthrough quitKey -> do
+    conf <- asks config
+    let baseMap = keys conf conf
     submapDefaultWithKey
       (\key -> persisting $ fromMaybe (uncurry Paste.sendKey key) (M.lookup key baseMap))
       (M.insert quitKey deactivate $ persisting <$> keymap mode)
@@ -90,7 +93,7 @@ instance Show ModeType where
   show ExitOnUnbound            = "Exit"
   show (IgnoreUnbound _)        = "Ign"
   show (Passthrough _)          = "pass"
-  show (CapturePassthrough _ _) = "Pass"
+  show (CapturePassthrough _)   = "Pass"
 
 instance Show Mode where
   show (Mode name _ modeType) =
