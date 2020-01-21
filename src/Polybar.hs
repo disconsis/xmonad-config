@@ -5,21 +5,33 @@ module Polybar ( MouseButton(..)
                , formatOne
                , format
                , Polybar.manage
+               , screenNames
+               , polybarStartup
+               , polybarCleanup
+               , polybarLog
                ) where
 
-import qualified Codec.Binary.UTF8.String     as UTF8
-
-import qualified DBus
-import qualified DBus.Client                  as DBus
+import           Control.Monad
+import           Control.Monad.Extra
+import           Data.Maybe
 
 import           Text.Printf
+import           Text.Read
 
 import           XMonad
+import           XMonad.Config.Dmwit          (outputOf, splitColon)
+import           XMonad.Hooks.DynamicBars
 import           XMonad.Hooks.DynamicLog
 import qualified XMonad.Hooks.ManageDocks     as ManageDocks
 import           XMonad.Layout.LayoutModifier (ModifiedLayout)
-import           XMonad.Util.SpawnOnce        (spawnOnce)
+import           XMonad.Util.Run
 
+import           Utils
+
+import           System.IO
+import           System.Posix.Files
+
+-- * Formatting
 
 -- | Mouse buttons for polybar.
 data MouseButton
@@ -69,45 +81,57 @@ formatOne (Action button command) =
 format :: [Formatting] -> String -> String
 format fmt = foldr (.) id (fmap formatOne fmt)
 
+-- * Setup & Multiple bars
 
--- | Setup a dbus client for polybar.
-init :: IO DBus.Client
-init = do
-  dbus <- DBus.connectSession
-  DBus.requestName dbus (DBus.busName_ "org.xmonad.log")
-    [ DBus.nameAllowReplacement
-    , DBus.nameReplaceExisting
-    , DBus.nameDoNotQueue
-    ]
-  return dbus
+screenNames :: IO [(ScreenId, String)]
+screenNames = do
+  output <-
+    outputOf "xrandr --listactivemonitors | awk '{print $1 $4}'"
+  return $ mapMaybe parseItem $ drop 1 $ lines output
 
-
--- | Emit a DBus signal on log updates.
-dbusOutput :: DBus.Client -> String -> IO ()
-dbusOutput client str = do
-    DBus.emit client signal
   where
-    signal = (DBus.signal objectPath interfaceName memberName)
-             { DBus.signalBody = [DBus.toVariant $ UTF8.decodeString str] }
-    objectPath = DBus.objectPath_ "/org/xmonad/Log"
-    interfaceName = DBus.interfaceName_ "org.xmonad.Log"
-    memberName = DBus.memberName_ "Update"
+    parseItem :: String -> Maybe (ScreenId, String)
+    parseItem s = case splitColon s of
+      [a,b] ->
+        case readMaybe a of
+          Just a' -> Just (S a', b)
+          Nothing -> Nothing
 
+      _ -> Nothing
 
--- | Set the pretty printer to output to dbus.
-dbusPP :: DBus.Client -> PP -> PP
-dbusPP client pp = pp { ppOutput = ppOutput pp >> dbusOutput client }
+polybarStartup :: ScreenId -> IO Handle
+polybarStartup screenId = do
+  screenName <- fromJust <$> lookup screenId <$> screenNames
+  logMsg screenName -- This is required (maybe to force strictness?)
+  spawn (printf "MONITOR=%s polybar xmonad" screenName)
+  let fifo = printf "/tmp/polybar-%s.fifo" screenName
+  unlessM (fileExist fifo) $
+    createNamedPipe fifo (unionFileModes namedPipeMode accessModes)
+  handle <- spawnPipe $ "tee " <> fifo
+  return handle
 
+polybarCleanup :: IO ()
+polybarCleanup = do
+  spawn "pkill -9 polybar"
+
+-- TODO: This takes a lot of time to update sometimes
+polybarLog :: X PP -> X PP -> X ()
+polybarLog focusedPP unfocusedPP =
+  join $ multiPP <$> focusedPP <*> unfocusedPP
 
 -- | Modify a config to handle polybar.
 manage :: LayoutClass l Window
        => X PP
+       -> X PP
        -> XConfig l
-       -> IO (XConfig (ModifiedLayout ManageDocks.AvoidStruts l))
-manage pp config = do
-    client <- Polybar.init
-    return $ ManageDocks.docks $ config
-      { startupHook = spawnOnce "~/.config/polybar/launch.sh" <+> startupHook config
-      , layoutHook = ManageDocks.avoidStruts $ layoutHook config
-      , logHook = (dynamicLogWithPP =<< (dbusPP client) <$> pp) <+> logHook config
-      }
+       -> XConfig (ModifiedLayout ManageDocks.AvoidStruts l)
+manage focusedPP unfocusedPP config =
+  ManageDocks.docks $ config
+    { startupHook = startupHook config <+>
+        dynStatusBarStartup polybarStartup polybarCleanup
+    , handleEventHook = handleEventHook config <+>
+        dynStatusBarEventHook polybarStartup polybarCleanup
+    , logHook = logHook config <+>
+        polybarLog focusedPP unfocusedPP
+    , layoutHook = ManageDocks.avoidStruts $ layoutHook config
+    }

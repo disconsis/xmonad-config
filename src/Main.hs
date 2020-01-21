@@ -135,6 +135,14 @@ onedarkPP = PP
         else
             return Nothing
 
+onedarkUnfocusedPP :: PP
+onedarkUnfocusedPP = onedarkPP
+  { ppCurrent = fromJust $ ppVisibleNoWindows onedarkPP
+  , ppVisible = ppHiddenNoWindows onedarkPP
+  , ppVisibleNoWindows = Just $ ppHiddenNoWindows onedarkPP
+  , ppHidden = ppHiddenNoWindows onedarkPP
+  }
+
 
 -- *** Workspace buttons, Named workspaces
 
@@ -620,9 +628,8 @@ myConfig = def
     }
 
 main :: IO ()
-main = do
-    config <-
-        Polybar.manage polybarPP $
+main =
+    xmonad $
+        Polybar.manage polybarPP (return onedarkUnfocusedPP) $
         ewmh $
         myConfig
-    xmonad config

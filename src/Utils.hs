@@ -27,5 +27,8 @@ placeCursorMiddle :: X ()
 placeCursorMiddle =
   currentScreen >>= \screen -> Warp.warpToScreen screen (1/2) (1/2)
 
-logMsg :: String -> X ()
-logMsg = liftIO . hPutStrLn stderr . printf "[XMonad] %s"
+logMsg :: Show s => s -> IO ()
+logMsg = hPutStrLn stderr . printf "[XMonad] %s" . show
+
+logMsgX :: Show s => s -> X ()
+logMsgX = liftIO . logMsg
