@@ -102,7 +102,7 @@ screenNames = do
 polybarStartup :: ScreenId -> IO Handle
 polybarStartup screenId = do
   screenName <- fromJust <$> lookup screenId <$> screenNames
-  logMsg screenName -- This is required (maybe to force strictness?)
+  logStr screenName -- This is required (maybe to force strictness?)
   spawn (printf "MONITOR=%s polybar xmonad" screenName)
   let fifo = printf "/tmp/polybar-%s.fifo" screenName
   unlessM (fileExist fifo) $

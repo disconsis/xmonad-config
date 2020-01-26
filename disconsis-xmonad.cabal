@@ -12,6 +12,7 @@ executable disconsis-xmonad
                , Color
                , Mode
                , Utils
+               , Youtube
 
   hs-source-dirs:
       src

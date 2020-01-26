@@ -10,6 +10,8 @@ import           System.IO
 
 import           Text.Printf
 
+import           Control.Monad
+
 
 named name = Renamed.renamed [Renamed.Replace name]
 
@@ -20,6 +22,10 @@ padRight totalWidth string =
 currentScreen :: X ScreenId
 currentScreen = W.screen <$> W.current <$> gets windowset
 
+currentWindow :: X (Maybe Window)
+currentWindow =
+  gets (W.peek . windowset)
+
 currentWs :: X WorkspaceId
 currentWs = W.currentTag <$> gets windowset
 
@@ -27,8 +33,11 @@ placeCursorMiddle :: X ()
 placeCursorMiddle =
   currentScreen >>= \screen -> Warp.warpToScreen screen (1/2) (1/2)
 
-logMsg :: Show s => s -> IO ()
-logMsg = hPutStrLn stderr . printf "[XMonad] %s" . show
+logStr :: MonadIO m => String -> m ()
+logStr = liftIO . hPutStrLn stderr . printf "[XMonad] %s"
 
-logMsgX :: Show s => s -> X ()
-logMsgX = liftIO . logMsg
+logger :: (MonadIO m , Show s) => s -> m ()
+logger = logStr . show
+
+when_ :: MonadPlus m => Bool -> a -> m a
+when_ bool m = if bool then return m else mzero

@@ -37,6 +37,7 @@ import           XMonad.Hooks.ManageHelpers          hiding (currentWs)
 import           XMonad.Hooks.SetWMName              (setWMName)
 
 import qualified XMonad.Layout.Decoration            as Decoration
+import           XMonad.Layout.Dwindle               as Dwindle
 import qualified XMonad.Layout.Gaps                  as Gaps
 import           XMonad.Layout.LayoutCombinators
 import qualified XMonad.Layout.LimitWindows          as LimitWindows
@@ -127,13 +128,13 @@ onedarkPP = PP
         let layout = W.layout workspace
         WindowLimitActive isLimitActive <- ExtState.get
         let numActualWindows = length $ W.integrate' $ W.stack workspace
-        let numHiddenWindows = numActualWindows - myWindowLimit
-        if (description layout == description myTall) && isLimitActive && (numHiddenWindows > 0) then
-            return $ Just $
-            Polybar.format [ Foreground onedarkYellow ] $
-            printf "(H:%d)" numHiddenWindows
-        else
-            return Nothing
+        let numHiddenWindows =
+              (\n -> if n <= 0 then "" else ":" <> show n) $
+              numActualWindows - myWindowLimit
+        return $
+          when_ (description layout == description myTall && isLimitActive) $
+          Polybar.format [ Foreground onedarkYellow ] $
+          printf "(H%s)" numHiddenWindows
 
 onedarkUnfocusedPP :: PP
 onedarkUnfocusedPP = onedarkPP
@@ -183,7 +184,7 @@ blackWhitePrompt = def
     , Prompt.historyFilter = Prompt.uniqSort
     , Prompt.showCompletionOnTab = False
     , Prompt.searchPredicate = \string completion -> isPrefixOf (toLower <$> string) (toLower <$> completion)
-    , Prompt.autoComplete = Just 2000
+    , Prompt.autoComplete = Nothing
     , Prompt.completionKey = (0, xK_Tab)
     , Prompt.maxComplRows = Just 5
     }
@@ -267,16 +268,13 @@ myWindowLimit = 3
 
 myTall :: Decoration.ModifiedLayout Renamed.Rename
           (Decoration.ModifiedLayout LimitWindows.LimitWindows
-          (Decoration.ModifiedLayout Spacing.Spacing Tall))
+          (Decoration.ModifiedLayout Spacing.Spacing Dwindle))
           Window
 myTall =
     named "Windowed" $
     LimitWindows.limitWindows 3 $
     mySpacing $
-    Tall { tallNMaster        = 1
-         , tallRatioIncrement = (3/100)
-         , tallRatio          = (1/2)
-         }
+    Spiral R Dwindle.CW 1 (4/3)
 
 
 -- *** Toggle window limit
@@ -284,7 +282,7 @@ myTall =
 newtype WindowLimitActive = WindowLimitActive Bool
 
 instance ExtensionClass WindowLimitActive where
-  initialValue = WindowLimitActive True
+  initialValue = WindowLimitActive False
 
 toggleWindowLimit :: X ()
 toggleWindowLimit = do
@@ -293,6 +291,7 @@ toggleWindowLimit = do
   then LimitWindows.setLimit 500
   else LimitWindows.setLimit myWindowLimit
   ExtState.put $ WindowLimitActive (not isActive)
+  refresh
 
 
 -- ** Tabbed
@@ -394,13 +393,24 @@ myKeys config =
 -- ** Control
 
 cmdList :: [(String, X ())]
-cmdList = [ ("set max volume", setMaxVolume) ]
+cmdList = [ ("set max volume", setMaxVolume)
+          , ("toggle gaps", toggleGaps)
+          , ("refresh", refreshAll)
+          ]
   where
     setMaxVolume = do
       volString <- Prompt.inputPrompt blackWhitePrompt "Max Volume"
       fromMaybe mempty $ do
         maxVol <- volString >>= readMaybe
         return $ ExtState.put $ Volume maxVol
+
+    toggleGaps =
+      sendMessage Gaps.ToggleGaps
+      >> Spacing.toggleWindowSpacingEnabled
+      >> Spacing.toggleScreenSpacingEnabled
+
+    refreshAll =
+      refresh >> rescreen
 
 myControlKeys :: [(String, X ())]
 myControlKeys =
