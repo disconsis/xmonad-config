@@ -15,9 +15,9 @@ import           Data.Maybe
 
 import           Text.Printf
 
+import           Utils                       (Key)
 
 
-type Key = (KeyMask, KeySym)
 
 -- * Mode state
 
@@ -90,10 +90,10 @@ activate mode = do
 -- * Printing (modeline)
 
 instance Show ModeType where
-  show ExitOnUnbound            = "Exit"
-  show (IgnoreUnbound _)        = "Ign"
-  show (Passthrough _)          = "pass"
-  show (CapturePassthrough _)   = "Pass"
+  show ExitOnUnbound          = "Exit"
+  show (IgnoreUnbound _)      = "Ign"
+  show (Passthrough _)        = "pass"
+  show (CapturePassthrough _) = "Pass"
 
 instance Show Mode where
   show (Mode name _ modeType) =

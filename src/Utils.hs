@@ -1,16 +1,15 @@
 module Utils where
 
-
+import           Control.Monad
+import           System.IO
+import           Text.Printf
 import           XMonad
 import qualified XMonad.Actions.Warp   as Warp
 import qualified XMonad.Layout.Renamed as Renamed
 import qualified XMonad.StackSet       as W
 
-import           System.IO
 
-import           Text.Printf
-
-import           Control.Monad
+type Key = (KeyMask, KeySym)
 
 
 named name = Renamed.renamed [Renamed.Replace name]

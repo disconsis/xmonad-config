@@ -73,6 +73,11 @@ polybarPP =
     namedGotoPP $
     onedarkPP
 
+polybarUnfocusedPP :: X PP
+polybarUnfocusedPP =
+  namedGotoPP $
+  onedarkUnfocusedPP
+
 -- *** Theme
 onedarkPP :: PP
 onedarkPP = PP
@@ -171,7 +176,7 @@ namedGotoPP pp = do
 blackWhitePrompt :: Prompt.XPConfig
 blackWhitePrompt = def
     { -- Look
-      Prompt.font = "xft:Iosevka Nerd Font:pixelsize=15"
+      Prompt.font = "xft:ypn envypn:pixelsize=20"
     , Prompt.bgColor = white
     , Prompt.fgColor = black
       -- Location
@@ -421,7 +426,8 @@ myControlKeys =
     ]
     where
       recompileXMonad =
-          spawn "xmonad --recompile && xmonad --restart;\
+          spawn "notify-send 'Reloading XMonad';\
+                \xmonad --recompile && xmonad --restart;\
                 \sleep 1; notify-send 'XMonad reloaded'"
           >> refresh
 
@@ -640,6 +646,6 @@ myConfig = def
 main :: IO ()
 main =
     xmonad $
-        Polybar.manage polybarPP (return onedarkUnfocusedPP) $
+        Polybar.manage polybarPP polybarUnfocusedPP $
         ewmh $
         myConfig
