@@ -51,6 +51,7 @@ import qualified XMonad.Layout.Spacing               as Spacing
 import qualified XMonad.Layout.Tabbed                as Tabbed
 
 import qualified XMonad.Actions.CycleWS              as CycleWS
+import           XMonad.Actions.CycleWindows
 import qualified XMonad.Actions.GroupNavigation      as GroupNavigation
 import qualified XMonad.Actions.SpawnOn              as SpawnOn
 import qualified XMonad.Actions.WorkspaceNames       as WorkspaceNames
@@ -176,7 +177,7 @@ namedGotoPP pp = do
 blackWhitePrompt :: Prompt.XPConfig
 blackWhitePrompt = def
     { -- Look
-      Prompt.font = "xft:ypn envypn:pixelsize=20"
+      Prompt.font = "xft:ypn envypn:pixelsize=15"
     , Prompt.bgColor = white
     , Prompt.fgColor = black
       -- Location
@@ -458,9 +459,11 @@ vimNavMode = Mode.Mode
 -- ** Media
 
 newtype Volume = Volume Natural
+  deriving (Read,Show)
 
 instance ExtensionClass Volume where
   initialValue = Volume 150
+  extensionType = PersistentExtension
 
 myMediaKeys =
     [ -- volume
@@ -523,6 +526,9 @@ myWindowMovementKeys =
     , ("M-S-j", windows W.swapDown)
     , ("M-S-k", windows W.swapUp)
     , ("M-S-m", windows W.swapMaster)
+      -- cycle windows
+    , ("M-C-j", windows (W.swapMaster . W.focusDown))
+    , ("M-C-k", windows (W.swapMaster . W.focusUp))
     ]
     where focusLastWindow =
               GroupNavigation.nextMatch GroupNavigation.History (return True)
@@ -594,9 +600,9 @@ myLayoutKeys =
 myLauncherKeys =
     fmap spawn <$>
     [ ("M-u t",   terminal myConfig)
-    , ("M-u g",   "google-chrome-stable")
+    , ("M-u g",   "firefox")
     , ("M-u r",   "$TERMINAL ranger")
-    , ("M-u e",   "emacsclientserver.sh")
+    , ("M-u e",   "emacs")
     , ("M-u S-e", "emacs --debug-init")
     , ("M-u q",   "qutebrowser")
     , ("M-u w",   "whatsapp.sh")
