@@ -106,8 +106,9 @@ polybarStartup screenId = do
   spawn (printf "MONITOR=%s polybar xmonad" screenName)
   let fifo = printf "/tmp/polybar-%s.fifo" screenName
   unlessM (fileExist fifo) $
-    createNamedPipe fifo (unionFileModes namedPipeMode accessModes)
-  handle <- spawnPipe $ "tee " <> fifo
+    createNamedPipe fifo accessModes
+  handle <- openBinaryFile fifo WriteMode
+  hSetBuffering handle LineBuffering
   return handle
 
 polybarCleanup :: IO ()
