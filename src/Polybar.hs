@@ -102,13 +102,7 @@ screenNames = do
 polybarStartup :: ScreenId -> IO Handle
 polybarStartup screenId = do
   screenName <- fromJust <$> lookup screenId <$> screenNames
-  logStr screenName -- This is required (maybe to force strictness?)
-  spawn (printf "MONITOR=%s polybar xmonad" screenName)
-  let fifo = printf "/tmp/polybar-%s.fifo" screenName
-  unlessM (fileExist fifo) $
-    createNamedPipe fifo (unionFileModes namedPipeMode accessModes)
-  handle <- spawnPipe $ "tee " <> fifo
-  return handle
+  spawnPipe $ "polybar-start-monitor " ++ screenName
 
 polybarCleanup :: IO ()
 polybarCleanup = do
