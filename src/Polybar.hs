@@ -56,6 +56,9 @@ data Formatting
   | Font Int
   | Offset Int
   | Action MouseButton String
+  | AlignLeft
+  | AlignCenter
+  | AlignRight
   deriving (Eq, Show)
 
 
@@ -69,12 +72,15 @@ formatOne :: Formatting -> String -> String
 formatOne (Foreground color) = wrap (bracket $ "F" ++ color) (bracket "F-")
 formatOne (Background color) = wrap (bracket $ "B" ++ color) (bracket "B-")
 formatOne Reverse            = wrap (bracket "R") (bracket "R")
-formatOne (Underline color)  = wrap (bracket ("u" ++ color) ++ bracket "+u") (bracket "-u")
-formatOne (Overline color)   = wrap (bracket ("o" ++ color) ++ bracket "+o") (bracket "-o")
+formatOne (Underline color)  = wrap (bracket ("U" ++ color) ++ bracket "+u") (bracket "-u")
+formatOne (Overline color)   = wrap (bracket ("O" ++ color) ++ bracket "+o") (bracket "-o")
 formatOne (Font index)       = wrap (bracket "T" ++ show index) (bracket "T-")
 formatOne (Offset size)      = (bracket ("O" ++ show size) ++)
 formatOne (Action button command) =
   wrap (bracket (printf "A%d:%s:" (fromEnum button + 1) command)) (bracket "A")
+formatOne AlignLeft          = (bracket "l" ++)
+formatOne AlignCenter        = (bracket "c" ++)
+formatOne AlignRight         = (bracket "r" ++)
 
 
 -- | Implementation of [[polybar formatting rules][https://github.com/jaagr/polybar/wiki/Formatting]].
@@ -101,24 +107,32 @@ screenNames = do
 
 polybarStartup :: ScreenId -> IO Handle
 polybarStartup screenId = do
+  spawn "polybar-launch"
   screenName <- fromJust <$> lookup screenId <$> screenNames
   logStr screenName -- This is required (maybe to force strictness?)
-  spawn (printf "MONITOR=%s polybar xmonad" screenName)
-  let fifo = printf "/tmp/polybar-%s.fifo" screenName
-  unlessM (fileExist fifo) $
-    createNamedPipe fifo accessModes
-  handle <- openBinaryFile fifo WriteMode
-  hSetBuffering handle LineBuffering
-  return handle
+  let fonts =
+        [ "ypn envypn:size=13"
+        , "Iosevka Nerd Font:size=10"
+        , "Material Icons:size=11"
+        , "FuraCode Nerd Font:size=10"
+        , "siji:size=10"
+        , "file-icons:size=10"
+        ]
+  let fontString = concatMap (wrap "-f \"" "\" ") $ take 10 fonts
+  let lemonbarCmd = printf "lemonbar -p -b -o -2 %s -O %s | bash" fontString screenName
+  logStr lemonbarCmd
+  spawnPipe lemonbarCmd
 
 polybarCleanup :: IO ()
 polybarCleanup = do
-  spawn "pkill -9 polybar"
+  spawn "pkill -9 lemonbar"
+  spawn "pkill polybar"
 
--- TODO: This takes a lot of time to update sometimes
 polybarLog :: X PP -> X PP -> X ()
-polybarLog focusedPP unfocusedPP =
-  join $ multiPP <$> focusedPP <*> unfocusedPP
+polybarLog focusedPP unfocusedPP = do
+  focused' <- focusedPP
+  unfocused' <- unfocusedPP
+  multiPP focused' unfocused'
 
 -- | Modify a config to handle polybar.
 manage :: LayoutClass l Window
@@ -131,8 +145,10 @@ manage focusedPP unfocusedPP config =
     { startupHook = startupHook config <+>
         dynStatusBarStartup polybarStartup polybarCleanup
     , handleEventHook = handleEventHook config <+>
-        dynStatusBarEventHook polybarStartup polybarCleanup
+        dynStatusBarEventHook polybarStartup polybarCleanup <+>
+        ManageDocks.docksEventHook
     , logHook = logHook config <+>
         polybarLog focusedPP unfocusedPP
     , layoutHook = ManageDocks.avoidStruts $ layoutHook config
+    , manageHook = manageHook config <+> ManageDocks.manageDocks
     }

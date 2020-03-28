@@ -19,3 +19,8 @@ onedarkGreenDarker = "#689349"
 white = "#ffffff"
 black = "#000000"
 grey  = "#444444"
+
+-- ** Primary
+red   = "#ff0000"
+green = "#00ff00"
+blue  = "#0000ff"

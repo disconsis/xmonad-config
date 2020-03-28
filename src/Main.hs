@@ -1,5 +1,4 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -50,8 +49,8 @@ import qualified XMonad.Layout.Renamed               as Renamed
 import qualified XMonad.Layout.Spacing               as Spacing
 import qualified XMonad.Layout.Tabbed                as Tabbed
 
-import qualified XMonad.Actions.CycleWS              as CycleWS
 import           XMonad.Actions.CycleWindows
+import qualified XMonad.Actions.CycleWS              as CycleWS
 import qualified XMonad.Actions.GroupNavigation      as GroupNavigation
 import qualified XMonad.Actions.SpawnOn              as SpawnOn
 import qualified XMonad.Actions.WorkspaceNames       as WorkspaceNames
@@ -59,6 +58,7 @@ import qualified XMonad.Actions.WorkspaceNames       as WorkspaceNames
 import qualified XMonad.Util.Cursor                  as Cursor
 import qualified XMonad.Util.ExtensibleState         as ExtState
 import qualified XMonad.Util.EZConfig                as EZConfig
+import           XMonad.Util.Loggers
 import qualified XMonad.Util.Paste                   as Paste
 import qualified XMonad.Util.WorkspaceCompare        as WorkspaceCompare
 
@@ -101,9 +101,10 @@ onedarkPP = PP
     , ppUrgent           = Polybar.format [ Foreground onedarkBlack
                                           , Background onedarkRed
                                           ] . pad
-    , ppTitle            = Polybar.format [ Foreground onedarkGrey
-                                          , Offset 20
-                                          ] . shorten 50
+    , ppTitle            = Polybar.format [ Foreground white
+                                          , Background onedarkBlack
+                                          , AlignCenter
+                                          ] . pad . shorten 50
     , ppLayout           = Polybar.format [ Foreground onedarkYellow ]
                            . padRight layoutDescriptionWidth
     , ppSep              = "  "
@@ -111,11 +112,23 @@ onedarkPP = PP
     , ppTitleSanitize    = filter (`notElem` ['%', '{', '}'])
     , ppOrder            = layoutFirstOrder
     , ppSort             = WorkspaceCompare.getSortByIndex
-    , ppExtras           = [hiddenWindows, currentMode]
+    , ppExtras           = --onLogger ( Polybar.format [ Foreground onedarkBlack
+                                    --                  , Background onedarkRed
+                                    --                  ]
+                                    -- . pad
+                                    -- ) <$>
+                           [ hiddenWindows
+                           , currentMode
+                           -- , date "%I:%M %p" -- time
+                           -- , date "%a, %b %d" -- date
+                           -- , battery
+                           -- , logCmd "pamixer --get-volume-human"
+                           ]
     , ppOutput           = const $ return ()
     }
     where
       layoutFirstOrder (workspaces : layout : title : extras) =
+        -- [layout, workspaces, title] ++ extras
         [layout] ++ extras ++ [workspaces, title]
       layoutFirstOrder other = other
 
@@ -218,7 +231,6 @@ myStartupHook = do
 -- * Layouts
 
 myLayoutHook =
-    ManageDocks.avoidStruts $
     Borders.smartBorders $
     myPerWorkspaceLayouts $
     MultiToggle.mkToggle (MultiToggle.single NBFULL) $
@@ -402,6 +414,7 @@ cmdList :: [(String, X ())]
 cmdList = [ ("set max volume", setMaxVolume)
           , ("toggle gaps", toggleGaps)
           , ("refresh", refreshAll)
+          , ("sink", withFocused $ windows . W.sink)
           ]
   where
     setMaxVolume = do
@@ -602,7 +615,7 @@ myLauncherKeys =
     [ ("M-u t",   terminal myConfig)
     , ("M-u g",   "firefox")
     , ("M-u r",   "$TERMINAL ranger")
-    , ("M-u e",   "emacs")
+    , ("M-u e",   "emacsclient -a '' -c")
     , ("M-u S-e", "emacs --debug-init")
     , ("M-u q",   "qutebrowser")
     , ("M-u w",   "whatsapp.sh")
