@@ -483,6 +483,15 @@ myMediaKeys =
     , ("M-S-]", setBrightness "100%")
       -- F11 without Fn key
     , ("<Print>", Paste.sendKey Paste.noModMask xK_F11)
+      -- firefox shortcuts
+        -- tab up/down
+    , ("C-k", firefoxSendKey (controlMask, xK_k) (controlMask, xK_Page_Up))
+    , ("C-j", firefoxSendKey (controlMask, xK_j) (controlMask, xK_Page_Down))
+        -- backward/forward
+    , ("C-h", firefoxSendKey (controlMask, xK_h) (mod1Mask, xK_Left))
+    , ("C-l", firefoxSendKey (controlMask, xK_h) (mod1Mask, xK_Right))
+        -- address bar (rebind for C-l shortcut)
+    , ("C-;", firefoxSendKey (controlMask, xK_semicolon) (controlMask, xK_l))
     ]
     where
       volumeStep = 5
@@ -503,6 +512,17 @@ myMediaKeys =
       setBrightness :: String -> X ()
       setBrightness val =
         spawn $ printf "sudo brightnessctl -d intel_backlight set %s" val
+
+      isFirefox :: X Bool
+      isFirefox = do
+        currentWin <- currentWindow
+        case currentWin of
+          Nothing -> return False
+          Just window -> runQuery (className =? "firefox") window
+
+      firefoxSendKey actual simulated =
+        isFirefox >>= \firefox ->
+        uncurry Paste.sendKey (if firefox then simulated else actual)
 
 
 -- open spotify if no players running
