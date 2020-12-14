@@ -14,6 +14,7 @@ module Polybar ( MouseButton(..)
 import           Control.Monad
 import           Control.Monad.Extra
 import           Data.Maybe
+import           Data.Functor
 
 import           Text.Printf
 import           Text.Read
@@ -84,11 +85,11 @@ format fmt = foldr (.) id (fmap formatOne fmt)
 -- * Setup & Multiple bars
 
 screenNames :: IO [(ScreenId, String)]
-screenNames = do
-  output <-
-    outputOf "xrandr --listactivemonitors | awk '{print $1 $4}'"
-  return $ mapMaybe parseItem $ drop 1 $ lines output
-
+screenNames =
+  outputOf "xrandr --listactivemonitors | awk '{print $1 $4}'"
+  <&> lines
+  <&> drop 1
+  <&> mapMaybe parseItem
   where
     parseItem :: String -> Maybe (ScreenId, String)
     parseItem s = case splitColon s of
@@ -101,12 +102,12 @@ screenNames = do
 
 polybarStartup :: ScreenId -> IO Handle
 polybarStartup screenId = do
-  screenName <- fromJust <$> lookup screenId <$> screenNames
+  screenName <- fromJust . lookup screenId <$> screenNames
   spawnPipe $ "polybar-start-monitor " ++ screenName
 
 polybarCleanup :: IO ()
-polybarCleanup = do
-  spawn "pkill -9 polybar"
+polybarCleanup =
+  spawn "pkill polybar"
 
 -- TODO: This takes a lot of time to update sometimes
 polybarLog :: X PP -> X PP -> X ()

@@ -3,6 +3,7 @@
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main (main) where
 
@@ -28,6 +29,7 @@ import qualified XMonad.StackSet                     as W
 import qualified XMonad.Prompt                       as Prompt
 import qualified XMonad.Prompt.Input                 as Prompt
 import qualified XMonad.Prompt.XMonad                as Prompt
+import           XMonad.Prompt.FuzzyMatch
 
 import           XMonad.Hooks.DynamicLog
 import           XMonad.Hooks.DynamicProperty
@@ -70,14 +72,10 @@ import           Utils
 -- * Features
 -- ** Polybar
 polybarPP :: X PP
-polybarPP =
-    namedGotoPP $
-    onedarkPP
+polybarPP = namedGotoPP onedarkPP
 
 polybarUnfocusedPP :: X PP
-polybarUnfocusedPP =
-  namedGotoPP $
-  onedarkUnfocusedPP
+polybarUnfocusedPP = namedGotoPP onedarkUnfocusedPP
 
 -- *** Theme
 onedarkPP :: PP
@@ -177,7 +175,7 @@ namedGotoPP pp = do
 blackWhitePrompt :: Prompt.XPConfig
 blackWhitePrompt = def
     { -- Look
-      Prompt.font = "xft:ypn envypn:pixelsize=15"
+      Prompt.font = "xft:Iosevka Nerd Font:pixelsize=13"
     , Prompt.bgColor = white
     , Prompt.fgColor = black
       -- Location
@@ -189,7 +187,7 @@ blackWhitePrompt = def
     , Prompt.historySize = 256
     , Prompt.historyFilter = Prompt.uniqSort
     , Prompt.showCompletionOnTab = False
-    , Prompt.searchPredicate = \string completion -> isPrefixOf (toLower <$> string) (toLower <$> completion)
+    , Prompt.searchPredicate = fuzzyMatch
     , Prompt.autoComplete = Nothing
     , Prompt.completionKey = (0, xK_Tab)
     , Prompt.maxComplRows = Just 5
@@ -219,7 +217,8 @@ myStartupHook = do
 
 myLayoutHook =
     ManageDocks.avoidStruts $
-    Borders.smartBorders $
+    -- Borders.smartBorders $
+    Borders.noBorders $
     myPerWorkspaceLayouts $
     MultiToggle.mkToggle (MultiToggle.single NBFULL) $
     myTall ||| myTabbed ||| myOneBig
@@ -402,6 +401,8 @@ cmdList :: [(String, X ())]
 cmdList = [ ("set max volume", setMaxVolume)
           , ("toggle gaps", toggleGaps)
           , ("refresh", refreshAll)
+          , ("float", withFocused float)
+          , ("sink", withFocused $ windows . W.sink)
           ]
   where
     setMaxVolume = do
@@ -421,7 +422,7 @@ cmdList = [ ("set max volume", setMaxVolume)
 myControlKeys :: [(String, X ())]
 myControlKeys =
     [ ("M-`", recompileXMonad)
-    , ("M-S-C-`", io $ exitWith ExitSuccess)
+    , ("M-S-C-`", io exitSuccess)
     , ("M-q", kill)
     , ("M-;", Prompt.xmonadPromptC cmdList blackWhitePrompt)
     ]
@@ -470,10 +471,24 @@ myMediaKeys =
       ("<XF86AudioLowerVolume>", reduceVolume)
     , ("<XF86AudioRaiseVolume>", raiseVolume)
     , ("<XF86AudioMute>"       , toggleMute)
+
+      -- the same thing, but on normal keys
+      -- (in case the keyboard doesn't have media keys)
+    , ("M-a", reduceVolume)
+    , ("M-s", raiseVolume)
+    , ("M-d", toggleMute)
+
       -- player (e.g. Spotify)
     , ("<XF86AudioNext>", spawn "playerctl next")
     , ("<XF86AudioPrev>", spawn "playerctl previous")
     , ("<XF86AudioPlay>", ensureSpotify >> spawn "playerctl play-pause")
+
+      -- the same thing, but on normal keys
+      -- (in case the keyboard doesn't have media keys)
+    , ("M-z", spawn "playerctl previous")
+    , ("M-x", ensureSpotify >> spawn "playerctl play-pause")
+    , ("M-c", spawn "playerctl next")
+
       -- touchscreen
     , ("<XF86Search>", spawn "xinput-toggle -r elan -n")
       -- brightness
@@ -501,7 +516,7 @@ myMediaKeys =
       raiseVolume = do
           (Volume maxVolume) <- ExtState.get
           spawn $ printf "[ $(pamixer --get-volume) -le %d ] \
-                         \&& pamixer --allow-boost --increase %d"
+                         \ && pamixer --allow-boost --increase %d"
               (maxVolume - volumeStep) volumeStep
 
       reduceVolume =
@@ -514,9 +529,8 @@ myMediaKeys =
         spawn $ printf "sudo brightnessctl -d intel_backlight set %s" val
 
       isFirefox :: X Bool
-      isFirefox = do
-        currentWin <- currentWindow
-        case currentWin of
+      isFirefox =
+        currentWindow >>= \case
           Nothing -> return False
           Just window -> runQuery (className =? "firefox") window
 
@@ -565,13 +579,13 @@ myWorkspaceMovementKeys =
     ]
     where
       keys = fmap return $ ['0'..'9'] ++ ['-', '=']
-      viewShift = windows . (liftM2 (.) W.greedyView W.shift)
+      viewShift = windows . liftM2 (.) W.view W.shift
       viewWorkspace ws =  windows (W.view ws) >> placeCursorMiddle
 
 
 myScreenMovementKeys =
     [ ("M-y", switchScreen)  -- ^ switch focus to the next screen
-    , ("M-S-y", swapScreens) -- ^ move currently focused window to next screen and switch focus to it
+    , ("M-S-y", swapScreens) -- ^ move currently focused workspace to next screen and switch focus to it
     ]
     where
       switchScreen = do
@@ -618,15 +632,15 @@ myLayoutKeys =
 -- ** Launcher
 
 myLauncherKeys =
-    fmap spawn <$>
+    fmap SpawnOn.spawnHere <$>
     [ ("M-u t",   terminal myConfig)
     , ("M-u g",   "firefox")
     , ("M-u r",   "$TERMINAL ranger")
     , ("M-u e",   "emacs")
     , ("M-u S-e", "emacs --debug-init")
     , ("M-u q",   "qutebrowser")
-    , ("M-u w",   "whatsapp.sh")
-    , ("M-u m",   "gmail.sh")
+    , ("M-u w",   "wifi-dmenu.sh")
+    , ("M-u m",   "autorandr-dmenu.sh")
     ]
 
 -- ** Info
@@ -661,6 +675,7 @@ myConfig = def
     , focusFollowsMouse  = False
     , clickJustFocuses   = False
     , keys               = myKeys
+    , mouseBindings      = const mempty
     , workspaces         = myWorkspaces
     , startupHook        = myStartupHook
     , layoutHook         = myLayoutHook
